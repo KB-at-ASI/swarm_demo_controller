@@ -1,75 +1,78 @@
 #!/usr/bin/env python3
 
 import asyncio
+import logging
+
 from mavsdk import System
 from mavsdk.action import OrbitYawBehavior
 
+# configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-async def run():
-    drone_vtol = System()
-    await drone_vtol.connect(system_address="udpin://0.0.0.0:14541")
 
-    print("Waiting for drone to connect...")
-    async for state in drone_vtol.core.connection_state():
+async def connect_drone(drone_name: str, system_address: str, drone_index: int) -> System:
+    # as seen at https://discuss.px4.io/t/mavsdk-multiple-drones-problem/44693/2
+    # so I believe port 50051 is just a random starting port so that each System instance
+    # uses a different port to avoid conflicts
+    drone = System(port=50051 + drone_index)
+    try:
+      await asyncio.wait_for(drone.connect(system_address=system_address), timeout=3)
+      logger.info(f"Awaiting connection to {drone_name} at {system_address}")
+    except asyncio.TimeoutError:
+      logger.error(f"Error connecting to {drone_name} at {system_address}!")
+      return None
+    logger.info("Connection await complete to {drone_name}.")
+
+    async for state in drone.core.connection_state():
+        logger.debug(f"Connection state for {drone_name}:")
+        logger.debug(f"{state=}")
         if state.is_connected:
-            print("Drone discovered!")
+            logger.debug(f"Drone {drone_name} discovered!")
             break
+    logger.info(f"Connection state for drone {drone_name} complete.")
 
-    print("Waiting for drone to have a global position estimate...")
-    async for health in drone_vtol.telemetry.health():
+    logger.info(f"Waiting for drone {drone_name} to have a global position estimate...")
+    async for health in drone.telemetry.health():
         if health.is_global_position_ok and health.is_home_position_ok:
-            print("-- Global position estimate OK")
+            logger.debug(f"-- Global position estimate OK for drone {drone_name}")
             break
 
-    position = await drone_vtol.telemetry.position().__aiter__().__anext__()
-    orbit_height = position.absolute_altitude_m + 15
-    yaw_behavior = OrbitYawBehavior.HOLD_FRONT_TANGENT_TO_CIRCLE
+    return drone
 
-    print("-- Arming")
+
+async def vtol_mission(drone_vtol: System):
+    logger.info("-- Arming")
     await drone_vtol.action.arm()
 
-    print("--- Taking Off")
+    logger.info("--- Taking Off")
     await drone_vtol.action.set_takeoff_altitude(30.0)
     await drone_vtol.action.takeoff()
     await asyncio.sleep(10)
 
-    print(f"Do orbit at {orbit_height}m height from the ground")
+    # This action automatically flies the drone to the orbit radius
     await drone_vtol.action.do_orbit(
-        radius_m=10,
+        radius_m=18,
         velocity_ms=2,
-        yaw_behavior=yaw_behavior,
+        yaw_behavior=OrbitYawBehavior.HOLD_FRONT_TANGENT_TO_CIRCLE,
         latitude_deg=32.061467,
         longitude_deg=118.779284,
         absolute_altitude_m=30.0,
     )
-    await asyncio.sleep(60)
+
+    asyncio.sleep(15)
 
 
-async def run_x500():
-    drone_x500 = System()
-    await drone_x500.connect(system_address="udpin://0.0.0.0:14540")
-
-    print("Waiting for drone to connect...")
-    async for state in drone_x500.core.connection_state():
-        if state.is_connected:
-            print("Drone discovered!")
-            break
-
-    print("Waiting for drone to have a global position estimate...")
-    async for health in drone_x500.telemetry.health():
-        if health.is_global_position_ok and health.is_home_position_ok:
-            print("-- Global position estimate OK")
-            break
-
-    print("-- Arming")
+async def x500_mission(drone_x500: System):
+    logger.info("-- Arming")
     await drone_x500.action.arm()
 
-    print("--- Taking Off")
+    logger.info("--- Taking Off")
     await drone_x500.action.set_takeoff_altitude(25.0)
     await drone_x500.action.takeoff()
     await asyncio.sleep(10)
 
-    print(f"fly to firestation")
+    logger.info(f"fly to firestation")
     await drone_x500.action.goto_location(
         latitude_deg=32.061566,
         longitude_deg=118.779284,
@@ -78,7 +81,7 @@ async def run_x500():
     )    
     await asyncio.sleep(30)
 
-    print(f"look in firestation")
+    logger.info(f"look in firestation")
     await drone_x500.action.goto_location(
         latitude_deg=32.061566,
         longitude_deg=118.779284,
@@ -88,7 +91,7 @@ async def run_x500():
 
     await asyncio.sleep(30)
 
-    print(f"fly in firestation")
+    logger.info(f"fly in firestation")
     await drone_x500.action.goto_location(
         latitude_deg=32.061467,
         longitude_deg=118.779241,
@@ -96,7 +99,7 @@ async def run_x500():
         yaw_deg=200.0
     )
 
-    print(f"look around firestation")
+    logger.info(f"look around firestation")
     await drone_x500.action.goto_location(
         latitude_deg=32.061467,
         longitude_deg=118.779241,
@@ -124,7 +127,7 @@ async def run_x500():
 
     await asyncio.sleep(10)
 
-    print(f"fly out firestation")
+    logger.info(f"fly out firestation")
     await drone_x500.action.goto_location(
         latitude_deg=32.061398,
         longitude_deg=118.779249,
@@ -132,12 +135,33 @@ async def run_x500():
         yaw_deg=170.0
     )
 
-    await asyncio.sleep(30)
+    await asyncio.sleep(15)
 
     await drone_x500.action.return_to_launch()
 
-    print("--- Landing")
+    logger.info("--- Landing")
+
+
+async def run_swarm_demo():
+    
+    # Connect to all drones
+    drone_x500 = await connect_drone("x500", "udp://0.0.0.0:14540", 0)
+    if drone_x500 is None:
+        logger.error("X500 drone connection failed, aborting swarm demo.")
+        return
+    else:
+        logger.info("X500 initialized, starting mission...")
+
+    drone_vtol = await connect_drone("vtol", "udp://0.0.0.0:14541", 1)
+    if drone_vtol is None:
+        logger.error("VTOL drone connection failed, aborting swarm demo.")
+        return
+    else:
+        logger.info("VTOL initialized, starting mission...")
+
+    await vtol_mission(drone_vtol)
+    await x500_mission(drone_x500)
 
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    asyncio.run(run_swarm_demo())
