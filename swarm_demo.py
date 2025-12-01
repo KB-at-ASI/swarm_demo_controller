@@ -32,14 +32,27 @@ class Sim(object):
     vtol: System = None
     xlab550: System = None
     status: dict = {}
+    status_conditions: dict = {}
 
 
 def get_drone_status(sim: Sim, drone: System) -> DroneStatus:
     return sim.status.get(drone)
 
 
-def set_drone_status(sim: Sim, drone: System, status: DroneStatus) -> None:
-    sim.status[drone] = status
+async def set_drone_status(sim: Sim, drone: System, status: DroneStatus) -> None:
+    if drone not in sim.status_conditions:
+        sim.status_conditions[drone] = asyncio.Condition()
+    condition = sim.status_conditions[drone]
+    async with condition:
+        sim.status[drone] = status
+        condition.notify_all()
+
+
+async def wait_for_drone_status(sim: Sim, drone: System, target: DroneStatus) -> None:
+    """Wait until the global state becomes `target`."""
+    condition = sim.status_conditions[drone]
+    async with condition:
+        await condition.wait_for(lambda: sim.status[drone] == target)
 
 
 async def connect_drone(
@@ -153,42 +166,25 @@ async def drone_goto(
         ):
             logger.debug("Reached target location and orientation.")
             if status_at_completion is not None:
-                set_drone_status(sim, drone, status_at_completion)
+                await set_drone_status(sim, drone, status_at_completion)
             break
         await asyncio.sleep(check_freqency_sec)
-
-
-# TODO: This is sloppy. Switch to using proper e.g. asynchio.Condition
-async def wait_for_drone_status(
-    sim: Sim,
-    drone: System,
-    desired_status: DroneStatus,
-    check_frequency_sec: float = 1.0,
-) -> None:
-    while True:
-        current_status = get_drone_status(sim, drone)
-        if current_status == desired_status:
-            logger.debug(f"Drone reached desired status: {desired_status.name}")
-            break
-        logger.debug(
-            f"Current drone status: {current_status.name}, waiting for {desired_status.name}"
-        )
-        await asyncio.sleep(check_frequency_sec)
 
 
 async def vtol_mission(sim: Sim) -> None:
     logger.info("vtol: Arming")
     await sim.vtol.action.arm()
-    set_drone_status(sim, sim.vtol, DroneStatus.ARMED)
+    await set_drone_status(sim, sim.vtol, DroneStatus.ARMED)
 
     logger.info("vtol: Taking Off")
     await sim.vtol.action.takeoff()
-    set_drone_status(sim, sim.vtol, DroneStatus.IN_AIR)
+    await set_drone_status(sim, sim.vtol, DroneStatus.IN_AIR)
 
     await drone_goto(
         sim,
         sim.vtol,
         altitude_m=30.0,
+        yaw_deg=250.0,
         status_at_completion=DroneStatus.ABOVE_LAUNCH_SITE,
     )
 
@@ -213,15 +209,16 @@ async def vtol_mission(sim: Sim) -> None:
 
 
 async def x3_mission(sim: Sim) -> None:
-    await asyncio.sleep(120)
+    # Wait for VTOL to be in position above firestation
+    await wait_for_drone_status(sim, sim.xlab550, DroneStatus.LOOKING_AT_FIRESTATION)
 
     logger.info("x3: Arming")
     await sim.x3.action.arm()
-    set_drone_status(sim, sim.x3, DroneStatus.ARMED)
+    await set_drone_status(sim, sim.x3, DroneStatus.ARMED)
 
     logger.info("x3: Taking Off")
     await sim.x3.action.takeoff()
-    set_drone_status(sim, sim.x3, DroneStatus.IN_AIR)
+    await set_drone_status(sim, sim.x3, DroneStatus.IN_AIR)
 
     await drone_goto(
         sim,
@@ -284,7 +281,7 @@ async def x3_mission(sim: Sim) -> None:
     await drone_goto(
         sim,
         sim.x3,
-        absolute_altitude_m=2.8,
+        altitude_m=2.8,
         yaw_deg=170.0,
     )
 
@@ -296,7 +293,7 @@ async def x3_mission(sim: Sim) -> None:
         sim.x3,
         latitude_deg=32.061398,
         longitude_deg=118.779249,
-        absolute_altitude_m=2.6,
+        altitude_m=2.6,
         yaw_deg=170.0,
         status_at_completion=DroneStatus.LOOKING_AT_FIRESTATION,
     )
@@ -309,15 +306,16 @@ async def x3_mission(sim: Sim) -> None:
 
 
 async def x500_mission(sim: Sim) -> None:
-    await asyncio.sleep(60)
+    # Wait for VTOL to be in position above firestation
+    await wait_for_drone_status(sim, sim.vtol, DroneStatus.ABOVE_FIRESTATION)
 
     logger.info("x500 Arming")
     await sim.x500.action.arm()
-    set_drone_status(sim, sim.x500, DroneStatus.ARMED)
+    await set_drone_status(sim, sim.x500, DroneStatus.ARMED)
 
     logger.info("x500 Taking Off")
     await sim.x500.action.takeoff()
-    set_drone_status(sim, sim.x500, DroneStatus.IN_AIR)
+    await set_drone_status(sim, sim.x500, DroneStatus.IN_AIR)
 
     await drone_goto(
         sim,
@@ -332,7 +330,7 @@ async def x500_mission(sim: Sim) -> None:
         sim.x500,
         latitude_deg=32.061566,
         longitude_deg=118.779284,
-        absolute_altitude_m=30.0,
+        altitude_m=30.0,
         yaw_deg=120.0,
         status_at_completion=DroneStatus.ABOVE_FIRESTATION,
     )
@@ -343,7 +341,7 @@ async def x500_mission(sim: Sim) -> None:
         sim.x500,
         latitude_deg=32.061453,
         longitude_deg=118.779477,
-        absolute_altitude_m=3.2,
+        altitude_m=3.2,
         yaw_deg=270.0,
         status_at_completion=DroneStatus.LOOKING_AT_FIRESTATION,
     )
@@ -351,17 +349,15 @@ async def x500_mission(sim: Sim) -> None:
 
 async def xlab550_mission(sim: Sim) -> None:
     # Wait for VTOL to be in position above firestation
-    await wait_for_drone_status(
-        sim, drone=sim.vtol, desired_status=DroneStatus.ABOVE_FIRESTATION
-    )
+    await wait_for_drone_status(sim, sim.vtol, DroneStatus.ABOVE_FIRESTATION)
 
     logger.info("xlab550: Arming")
     await sim.xlab550.action.arm()
-    set_drone_status(sim, sim.xlab550, DroneStatus.ARMED)
+    await set_drone_status(sim, sim.xlab550, DroneStatus.ARMED)
 
     logger.info("xlab550: Taking Off")
     await sim.xlab550.action.takeoff()
-    set_drone_status(sim, sim.xlab550, DroneStatus.IN_AIR)
+    await set_drone_status(sim, sim.xlab550, DroneStatus.IN_AIR)
 
     logger.info("xlab550: Climbing to 30m")
     await drone_goto(
@@ -417,20 +413,20 @@ async def run_swarm_demo() -> None:
         drone_x500_task, drone_vtol_task, drone_xlab550_task, drone_x3_task
     )
 
-    set_drone_status(sim, sim.x500, DroneStatus.CONNECTED)
-    set_drone_status(sim, sim.vtol, DroneStatus.CONNECTED)
-    set_drone_status(sim, sim.xlab550, DroneStatus.CONNECTED)
-    set_drone_status(sim, sim.x3, DroneStatus.CONNECTED)
+    await set_drone_status(sim, sim.x500, DroneStatus.CONNECTED)
+    await set_drone_status(sim, sim.vtol, DroneStatus.CONNECTED)
+    await set_drone_status(sim, sim.xlab550, DroneStatus.CONNECTED)
+    await set_drone_status(sim, sim.x3, DroneStatus.CONNECTED)
 
     # Run missions concurrently
     drone_vtol_mission_task = asyncio.create_task(vtol_mission(sim))
-    # drone_x500_mission_task = asyncio.create_task(x500_mission(sim))
+    drone_x500_mission_task = asyncio.create_task(x500_mission(sim))
     drone_x3_mission_task = asyncio.create_task(x3_mission(sim))
     drone_xlab550_mission_task = asyncio.create_task(xlab550_mission(sim))
 
     await asyncio.gather(
         drone_vtol_mission_task,
-        # drone_x500_mission_task,
+        drone_x500_mission_task,
         drone_x3_mission_task,
         drone_xlab550_mission_task,
     )
