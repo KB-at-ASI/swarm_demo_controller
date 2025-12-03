@@ -1,0 +1,248 @@
+from dataclasses import dataclass
+from typing import List, Tuple
+
+from PySide6.QtCore import Qt, Signal, QPointF
+from PySide6.QtGui import QPixmap, QPen, QBrush, QColor, QPainter
+from PySide6.QtWidgets import (
+    QGraphicsView,
+    QGraphicsScene,
+    QGraphicsPixmapItem,
+    QGraphicsEllipseItem,
+    QGraphicsLineItem,
+    QGraphicsSimpleTextItem,
+    QLabel,
+)
+
+
+@dataclass
+class Drone:
+    name: str
+    role: str
+    mode: str
+    latitude: float
+    longitude: float
+
+
+class MapWidget(QGraphicsView):
+    """A simple map widget that displays a background image, drone markers,
+    and allows selecting a mission location by clicking.
+
+    The lat/lon mapping is linear and configured with `bounds`.
+    """
+
+    mouseMoved = Signal(float, float)
+    locationSelected = Signal(float, float)
+
+    def __init__(self, image_path: str | None = None, parent=None):
+        super().__init__(parent)
+        # Use QPainter render hint for antialiasing (correct PySide6 API)
+        self.setRenderHint(QPainter.Antialiasing)
+        # Zoom state
+        self._zoom = 1.0
+        self._zoom_step = 1.15
+        self._zoom_min = 0.2
+        self._zoom_max = 5.0
+        # Anchor zoom to the mouse cursor
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setMouseTracking(True)
+
+        # Floating lat/lon inset (lower-right). Use a QLabel overlay so it
+        # doesn't scale with the scene or block mouse events.
+        self.coord_label = QLabel(self)
+        self.coord_label.setStyleSheet(
+            "background: rgba(0,0,0,0.6); color: white; padding: 4px; border-radius: 4px;"
+        )
+        self.coord_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.coord_label.hide()
+
+        self.scene = QGraphicsScene(self)
+        self.setScene(self.scene)
+
+        self.pixmap_item: QGraphicsPixmapItem | None = None
+        self.drones_items = {}  # name -> (ellipse, label)
+        self.lines = []
+        self.mission_circle = None
+        self.mission_point = None
+
+        # Default bounds (min_lat, max_lat, min_lon, max_lon)
+        # These can be tuned to match the map image used.
+        self.bounds = (32.0605, 32.0625, 118.7780, 118.7805)
+
+        if image_path:
+            self.load_image(image_path)
+        else:
+            # blank pixmap placeholder
+            pix = QPixmap(800, 600)
+            pix.fill(QColor("#f7f7f7"))
+            self.set_pixmap(pix)
+
+    def load_image(self, path: str) -> None:
+        pix = QPixmap(path)
+        self.set_pixmap(pix)
+
+    def set_pixmap(self, pix: QPixmap) -> None:
+        self.scene.clear()
+        self.pixmap_item = QGraphicsPixmapItem(pix)
+        self.scene.addItem(self.pixmap_item)
+        self.setSceneRect(self.pixmap_item.boundingRect())
+
+    def set_bounds(
+        self, min_lat: float, max_lat: float, min_lon: float, max_lon: float
+    ) -> None:
+        self.bounds = (min_lat, max_lat, min_lon, max_lon)
+
+    def latlon_to_point(self, lat: float, lon: float) -> QPointF:
+        min_lat, max_lat, min_lon, max_lon = self.bounds
+        rect = self.pixmap_item.boundingRect()
+        x = (lon - min_lon) / (max_lon - min_lon) * rect.width()
+        # invert y: image y increases downward
+        y = (max_lat - lat) / (max_lat - min_lat) * rect.height()
+        return QPointF(x, y)
+
+    def point_to_latlon(self, pt: QPointF) -> Tuple[float, float]:
+        min_lat, max_lat, min_lon, max_lon = self.bounds
+        rect = self.pixmap_item.boundingRect()
+        lon = min_lon + (pt.x() / rect.width()) * (max_lon - min_lon)
+        lat = max_lat - (pt.y() / rect.height()) * (max_lat - min_lat)
+        return lat, lon
+
+    def set_drones(self, drones: List[Drone]) -> None:
+        # Remove previous drone items
+        for name, (ellipse, label) in self.drones_items.items():
+            self.scene.removeItem(ellipse)
+            self.scene.removeItem(label)
+        self.drones_items.clear()
+
+        for d in drones:
+            pt = self.latlon_to_point(d.latitude, d.longitude)
+            ellipse = QGraphicsEllipseItem(pt.x() - 6, pt.y() - 6, 12, 12)
+            ellipse.setBrush(QBrush(QColor("#2b8cbe")))
+            ellipse.setPen(QPen(Qt.black))
+            label = QGraphicsSimpleTextItem(d.name)
+            label.setPos(pt.x() + 8, pt.y() - 8)
+            self.scene.addItem(ellipse)
+            self.scene.addItem(label)
+            self.drones_items[d.name] = (ellipse, label)
+
+    def highlight_drones(self, names: List[str]) -> None:
+        for name, (ellipse, label) in self.drones_items.items():
+            if name in names:
+                ellipse.setBrush(QBrush(QColor("#f03b20")))
+            else:
+                ellipse.setBrush(QBrush(QColor("#2b8cbe")))
+
+    def clear_mission(self) -> None:
+        if self.mission_circle:
+            self.scene.removeItem(self.mission_circle)
+            self.mission_circle = None
+        for ln in self.lines:
+            self.scene.removeItem(ln)
+        self.lines.clear()
+
+    def mouseMoveEvent(self, event):
+        if not self.pixmap_item:
+            return
+        scene_pt = self.mapToScene(event.pos())
+        lat, lon = self.point_to_latlon(scene_pt)
+        # update inset label
+        self.coord_label.setText(f"{lat:.6f}, {lon:.6f}")
+        self.coord_label.adjustSize()
+        margin = 8
+        vw = self.viewport().width()
+        vh = self.viewport().height()
+        lw = self.coord_label.width()
+        lh = self.coord_label.height()
+        # place in lower-right corner of the viewport
+        self.coord_label.move(vw - lw - margin, vh - lh - margin)
+        self.coord_label.show()
+
+        self.mouseMoved.emit(lat, lon)
+        super().mouseMoveEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton and self.pixmap_item:
+            scene_pt = self.mapToScene(event.pos())
+            lat, lon = self.point_to_latlon(scene_pt)
+            self.clear_mission()
+            # draw mission point
+            self.mission_point = QGraphicsEllipseItem(
+                scene_pt.x() - 4, scene_pt.y() - 4, 8, 8
+            )
+            self.mission_point.setBrush(QBrush(QColor("#4daf4a")))
+            self.scene.addItem(self.mission_point)
+            # draw mission circle (approx pixel radius)
+            radius_px = 50
+            self.mission_circle = QGraphicsEllipseItem(
+                scene_pt.x() - radius_px,
+                scene_pt.y() - radius_px,
+                radius_px * 2,
+                radius_px * 2,
+            )
+            pen = QPen(QColor("#4daf4a"))
+            pen.setStyle(Qt.DashLine)
+            self.mission_circle.setPen(pen)
+            self.scene.addItem(self.mission_circle)
+            self.locationSelected.emit(lat, lon)
+        super().mousePressEvent(event)
+
+    def leaveEvent(self, event):
+        # Hide the inset when the cursor leaves the view
+        try:
+            self.coord_label.hide()
+        except Exception:
+            pass
+        super().leaveEvent(event)
+
+    def resizeEvent(self, event):
+        # Keep the inset positioned in the lower-right when the view resizes
+        super().resizeEvent(event)
+        if self.coord_label and not self.coord_label.isHidden():
+            margin = 8
+            vw = self.viewport().width()
+            vh = self.viewport().height()
+            lw = self.coord_label.width()
+            lh = self.coord_label.height()
+            self.coord_label.move(vw - lw - margin, vh - lh - margin)
+
+    def wheelEvent(self, event):
+        """Zoom in/out with mouse wheel. Anchor is under mouse so zoom centers at cursor."""
+        delta = event.angleDelta().y()
+        if delta == 0:
+            return
+
+        if delta > 0:
+            factor = self._zoom_step
+        else:
+            factor = 1 / self._zoom_step
+
+        new_zoom = self._zoom * factor
+        if new_zoom < self._zoom_min or new_zoom > self._zoom_max:
+            return
+
+        self._zoom = new_zoom
+        self.scale(factor, factor)
+        event.accept()
+
+    def draw_lines_to_selected(self, selected_names: List[str]) -> None:
+        self.clear_mission()
+        # if mission point exists, leave it and draw lines
+        if self.mission_point is None:
+            return
+        center = self.mission_point.rect().center()
+        for name in selected_names:
+            items = self.drones_items.get(name)
+            if not items:
+                continue
+            ellipse, _ = items
+            line = QGraphicsLineItem(
+                ellipse.rect().center().x(),
+                ellipse.rect().center().y(),
+                center.x(),
+                center.y(),
+            )
+            pen = QPen(QColor("#444444"))
+            pen.setWidth(2)
+            line.setPen(pen)
+            self.scene.addItem(line)
+            self.lines.append(line)
