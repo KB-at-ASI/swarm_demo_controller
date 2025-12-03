@@ -184,7 +184,7 @@ async def vtol_mission(sim: Sim) -> None:
         sim,
         sim.vtol,
         altitude_m=30.0,
-        yaw_deg=250.0,
+        yaw_deg=240.0,
         status_at_completion=DroneStatus.ABOVE_LAUNCH_SITE,
     )
 
@@ -244,7 +244,7 @@ async def x3_mission(sim: Sim) -> None:
         sim.x3,
         latitude_deg=32.061566,
         longitude_deg=118.779284,
-        altitude_m=2.8,
+        altitude_m=3.0,
         yaw_deg=200.0,
         status_at_completion=DroneStatus.LOOKING_AT_FIRESTATION,
     )
@@ -281,7 +281,7 @@ async def x3_mission(sim: Sim) -> None:
     await drone_goto(
         sim,
         sim.x3,
-        altitude_m=2.8,
+        altitude_m=3.0,
         yaw_deg=170.0,
     )
 
