@@ -1,5 +1,8 @@
 from dataclasses import dataclass
+import json
+import os
 from typing import List, Tuple
+import util.geo_tools as geo_tools
 
 from PySide6.QtCore import Qt, Signal, QPointF
 from PySide6.QtGui import QPixmap, QPen, QBrush, QColor, QPainter
@@ -9,7 +12,7 @@ from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
     QGraphicsEllipseItem,
     QGraphicsLineItem,
-    QGraphicsSimpleTextItem,
+    QGraphicsTextItem,
     QLabel,
 )
 
@@ -33,7 +36,7 @@ class MapWidget(QGraphicsView):
     mouseMoved = Signal(float, float)
     locationSelected = Signal(float, float)
 
-    def __init__(self, image_path: str | None = None, parent=None):
+    def __init__(self, map_path: str | None = None, parent=None):
         super().__init__(parent)
         # Use QPainter render hint for antialiasing (correct PySide6 API)
         self.setRenderHint(QPainter.Antialiasing)
@@ -69,17 +72,29 @@ class MapWidget(QGraphicsView):
         # These can be tuned to match the map image used.
         self.bounds = (32.0605, 32.0625, 118.7780, 118.7805)
 
-        if image_path:
-            self.load_image(image_path)
+        if map_path:
+            self.load_map(map_path)
         else:
             # blank pixmap placeholder
             pix = QPixmap(800, 600)
             pix.fill(QColor("#f7f7f7"))
             self.set_pixmap(pix)
+            self.img_to_latlon_mapping = geo_tools.default_affine_transform()
 
-    def load_image(self, path: str) -> None:
-        pix = QPixmap(path)
-        self.set_pixmap(pix)
+    def load_map(self, path: str) -> None:
+        map_spec = json.loads(open(path).read())
+
+        if map_spec.get("map_image"):
+            image_path = map_spec["map_image"]
+            if not os.path.isfile(image_path):
+                raise ValueError("Image file does not exist")
+            pixmap = QPixmap(image_path)
+            self.set_pixmap(pixmap)
+
+        if map_spec.get("pixel to lat/lon mapping"):
+            # TODO: implement pixel to lat/lon mapping
+            pt_pairs = map_spec["pixel to lat/lon mapping"]["point_pairs"]
+            self.img_to_latlon_mapping = geo_tools.compute_affine_transform(pt_pairs)
 
     def set_pixmap(self, pix: QPixmap) -> None:
         self.scene.clear()
@@ -93,18 +108,24 @@ class MapWidget(QGraphicsView):
         self.bounds = (min_lat, max_lat, min_lon, max_lon)
 
     def latlon_to_point(self, lat: float, lon: float) -> QPointF:
-        min_lat, max_lat, min_lon, max_lon = self.bounds
-        rect = self.pixmap_item.boundingRect()
-        x = (lon - min_lon) / (max_lon - min_lon) * rect.width()
-        # invert y: image y increases downward
-        y = (max_lat - lat) / (max_lat - min_lat) * rect.height()
+        # min_lat, max_lat, min_lon, max_lon = self.bounds
+        # rect = self.pixmap_item.boundingRect()
+        # x = (lon - min_lon) / (max_lon - min_lon) * rect.width()
+        # # invert y: image y increases downward
+        # y = (max_lat - lat) / (max_lat - min_lat) * rect.height()
+
+        x, y = geo_tools.latlon_to_img_x_y(self.img_to_latlon_mapping, lat, lon)
         return QPointF(x, y)
 
     def point_to_latlon(self, pt: QPointF) -> Tuple[float, float]:
-        min_lat, max_lat, min_lon, max_lon = self.bounds
-        rect = self.pixmap_item.boundingRect()
-        lon = min_lon + (pt.x() / rect.width()) * (max_lon - min_lon)
-        lat = max_lat - (pt.y() / rect.height()) * (max_lat - min_lat)
+        lat, lon = geo_tools.img_x_y_to_latlon(
+            self.img_to_latlon_mapping, pt.x(), pt.y()
+        )
+
+        # min_lat, max_lat, min_lon, max_lon = self.bounds
+        # rect = self.pixmap_item.boundingRect()
+        # lon = min_lon + (pt.x() / rect.width()) * (max_lon - min_lon)
+        # lat = max_lat - (pt.y() / rect.height()) * (max_lat - min_lat)
         return lat, lon
 
     def set_drones(self, drones: List[Drone]) -> None:
@@ -119,7 +140,10 @@ class MapWidget(QGraphicsView):
             ellipse = QGraphicsEllipseItem(pt.x() - 6, pt.y() - 6, 12, 12)
             ellipse.setBrush(QBrush(QColor("#2b8cbe")))
             ellipse.setPen(QPen(Qt.black))
-            label = QGraphicsSimpleTextItem(d.name)
+            label = QGraphicsTextItem()
+            label.setHtml(
+                f'<div style="color: black; font-size: 12px; background-color: white;">{d.name}</div>'
+            )
             label.setPos(pt.x() + 8, pt.y() - 8)
             self.scene.addItem(ellipse)
             self.scene.addItem(label)

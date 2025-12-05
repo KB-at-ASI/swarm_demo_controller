@@ -8,11 +8,13 @@ Usage:
 
 import sys
 
-from gui.main import run
+from gui.main_window import run
 import os
 
 
-DEFAULT_MAP = os.path.join(os.path.dirname(__file__), "..", "assets", "demo_map.png")
+DEFAULT_MAP = os.path.join(
+    os.path.dirname(__file__), "..", "assets", "demo_scenario.json"
+)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,14 @@
+{
+  "map_image": "assets/demo_map.png",
+  "pixel to lat/lon mapping": {
+    "format": "a list of points with x, y, lat, lon",
+    "Point 1 description": "Center of circle in far upper left",
+    "Point 2 description": "Center of dark circle in upper right",
+    "Point 3 description": "Center of circle with 3 trees in lower right",
+    "point_pairs": [
+      [60, 6, 32.060717, 118.782664],
+      [691, 158, 32.06048, 118.779727],
+      [829, 798, 32.06271, 118.778114]
+    ]
+  }
+}

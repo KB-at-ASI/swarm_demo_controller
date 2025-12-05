@@ -6,12 +6,15 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
     QWidget,
+    QMainWindow,
     QHBoxLayout,
     QSplitter,
 )
 
+from PySide6.QtGui import QAction
+
 from .map_widget import MapWidget, Drone
-from .drone_list import DroneListWidget
+from .drone_table_widget import DroneListWidget
 
 
 def make_sample_drones() -> List[Drone]:
@@ -24,7 +27,27 @@ def make_sample_drones() -> List[Drone]:
     ]
 
 
-class MainWindow(QWidget):
+class MainWindow(QMainWindow):
+    def __init__(self, image_path: str | None = None):
+        super().__init__()
+        self.setWindowTitle("Swarm Controller")
+        self.resize(1100, 700)
+
+        self.createMenuBar()
+
+        self.central_widget = CentralWidget(image_path)
+        self.setCentralWidget(self.central_widget)
+
+    def createMenuBar(self):
+        menu = self.menuBar()
+        file_menu = menu.addMenu("&File")
+        quit_action = QAction("E&xit", self)
+        quit_action.setShortcut("Ctrl+Q")
+        quit_action.triggered.connect(QApplication.instance().quit)
+        file_menu.addAction(quit_action)
+
+
+class CentralWidget(QWidget):
     def __init__(self, image_path: str | None = None):
         super().__init__()
         self.setWindowTitle("Swarm Controller")
@@ -42,7 +65,7 @@ class MainWindow(QWidget):
         splitter.addWidget(self.map_widget)
         splitter.addWidget(drone_list_widget)
         # Prefer map larger than the drone list initially
-        splitter.setSizes([780, 200])
+        splitter.setSizes([780, 400])
 
         layout = QHBoxLayout(self)
         layout.addWidget(splitter)

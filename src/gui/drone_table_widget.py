@@ -25,7 +25,9 @@ class DroneListWidget(QWidget):
         super().__init__(parent)
 
         self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Vehicle ID", "Role", "Mode"])
+        # remove row numbers
+        self.table.verticalHeader().setVisible(False)
+        self.table.setHorizontalHeaderLabels(["Vehicle ID", "Role", "Status"])
         header = self.table.horizontalHeader()
         # Make columns stretch to fill available width
         header.setSectionResizeMode(QHeaderView.Stretch)
@@ -33,13 +35,22 @@ class DroneListWidget(QWidget):
         # Ensure the table expands with the widget
         self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
+        # Select by row
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+
+        # set font color when selected to black
+        # set selection color to light gray
+        self.table.setStyleSheet(
+            "QTableWidget::item:selected { color: black; background-color: lightgray; }"
+        )
+
         self.deploy_btn = QPushButton("Deploy Swarm")
-        self.status = QLabel("Lat/Lon:")
+        self.status = QLabel("")
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.table)
         layout.addWidget(self.deploy_btn)
-        layout.addWidget(self.status)
+        layout.addWidget(self.status, alignment=Qt.AlignRight)
         layout.setContentsMargins(4, 4, 4, 4)
 
     def populate(self, drones: List[Drone]) -> None:
