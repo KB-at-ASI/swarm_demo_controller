@@ -48,6 +48,13 @@ class MainWindow(QMainWindow):
         # register resize event to handle map resizing
         self.resizeEvent = self.on_map_resize
 
+        # register close event to handle application exit
+        self.closeEvent = self.on_close
+
+    def on_close(self, event):
+        self.app.loop.stop()
+        QApplication.instance().quit()
+
     def on_map_resize(self, event):
         super().resizeEvent(event)
         print(f"MainWindow resized  to: {self.size()}")
@@ -101,7 +108,6 @@ class CentralWidget(QWidget):
         self.map_widget.locationSelected.connect(self.on_location_selected)
         # connect selection and deploy signals from the DroneListWidget
         drone_list_widget.table.itemSelectionChanged.connect(self.on_selection_changed)
-        drone_list_widget.deploy_btn.clicked.connect(self.on_deploy)
 
     def on_mouse_moved(self, lat: float, lon: float) -> None:
         # This handler is kept as a no-op so
@@ -120,26 +126,11 @@ class CentralWidget(QWidget):
         self.map_widget.highlight_drones(selected)
         self.map_widget.draw_lines_to_selected(selected)
 
-    def on_deploy(self) -> None:
-        selected = self.drone_list_widget.get_selected_drone_ids()
-        # get mission location (if any)
-        if self.map_widget.mission_point:
-            center = self.map_widget.mission_point.rect().center()
-            mission_lat, mission_lon = self.map_widget.point_to_latlon(center)
-        else:
-            mission_lat = mission_lon = None
-
-        print(
-            "DEPLOY STUB: selected_drones=",
-            selected,
-            "mission_location=",
-            (mission_lat, mission_lon),
-        )
-
 
 def run(controller: SwarmController | None = None) -> None:
     app = QApplication(sys.argv)
     w = MainWindow(controller)
+    w.app = app
     w.show()
     QtAsyncio.run(handle_sigint=True)
 

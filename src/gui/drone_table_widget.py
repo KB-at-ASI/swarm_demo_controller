@@ -1,3 +1,4 @@
+import asyncio
 from typing import List
 
 from PySide6.QtCore import Qt
@@ -16,7 +17,7 @@ from PySide6.QtWidgets import (
 
 from controller.swarm_controller import SwarmController
 
-from .map_widget import Drone
+from model.drone import Drone
 
 
 class DroneListWidget(QWidget):
@@ -57,7 +58,10 @@ class DroneListWidget(QWidget):
         button_layout.addWidget(self.connect_btn)
 
         self.deploy_btn = QPushButton("Deploy Swarm")
-        self.deploy_btn.clicked.connect(self.on_deploy_clicked)
+        self.deploy_btn.clicked.connect(
+            lambda: asyncio.ensure_future(self.on_deploy_clicked())
+        )
+
         button_layout.addWidget(self.deploy_btn)
 
         self.status = QLabel("")
@@ -100,5 +104,6 @@ class DroneListWidget(QWidget):
         # self.status.setText(f"Connect clicked for: {', '.join(selected)}")
         self.controller.connect_all_drones()
 
-    def on_deploy_clicked(self) -> None:
+    async def on_deploy_clicked(self) -> None:
         self.status.setText("Deploy clicked")
+        await self.controller.deploy_swarm()

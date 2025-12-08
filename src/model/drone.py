@@ -1,3 +1,4 @@
+import asyncio
 from enum import Enum, auto
 
 from mavsdk.telemetry import Position
@@ -29,6 +30,8 @@ class Drone(object):
         self.mavsdk_system: MAVSDKSystem = None  # to be set when connected
         self.status_listeners = []
         self.state_listeners = []
+        self._state_update_task = None
+        self._state_update_rate = 1.0  # seconds
 
     def add_status_listener(self, listener) -> None:
         self.status_listeners.append(listener)
@@ -64,6 +67,33 @@ class Drone(object):
             alt=pos.absolute_altitude_m if pos else None,
             heading=heading,
         )
+
+    def set_state_update_rate(self, rate_seconds: float) -> None:
+        self._state_update_rate = rate_seconds
+        if self._state_update_task is not None:
+            self.stop_periodic_state_update()
+            self.start_periodic_state_update()
+
+    def start_periodic_state_update(self) -> None:
+        if self._state_update_task is None:
+            self._state_update_task = asyncio.create_task(self._periodic_state_update())
+
+    def stop_periodic_state_update(self) -> None:
+        if self._state_update_task is not None:
+            self._state_update_task.cancel()
+            self._state_update_task = None
+
+    async def _periodic_state_update(self) -> None:
+        while True:
+            pos = await self.get_one_position()
+            heading = await self.get_one_heading()
+            self.set_state(
+                lat=pos.latitude_deg if pos else None,
+                lon=pos.longitude_deg if pos else None,
+                alt=pos.absolute_altitude_m if pos else None,
+                heading=heading,
+            )
+            await asyncio.sleep(self._state_update_rate)
 
     async def get_one_position(self) -> Position:
         if self.mavsdk_system is None:

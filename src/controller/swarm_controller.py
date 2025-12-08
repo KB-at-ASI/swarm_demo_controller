@@ -7,6 +7,8 @@ from mavsdk.telemetry import Position
 
 from mavsdk import System
 
+from controller.demo_controller import Sim
+
 # TODO: Separate mavsdk specifics from controller logic
 
 # configure logging
@@ -17,6 +19,8 @@ logger = logging.getLogger(__name__)
 class SwarmController:
     def __init__(self, scenario_spec: str | None = None):
         self.drones = {}
+        # TODO: remove dependency on Sim
+        self.sim = Sim()
         if scenario_spec:
             self.load_scenario(scenario_spec)
 
@@ -114,5 +118,14 @@ class SwarmController:
 
         if initialize_state:
             await drone.initialize_state()
+            drone.start_periodic_state_update()
 
         return drone_system
+
+    async def deploy_swarm(self) -> None:
+        x500 = self.get_drone_by_id("x500")
+        drone_x500_mission_task = asyncio.create_task(self.sim.x500_mission(drone=x500))
+
+        await asyncio.gather(
+            drone_x500_mission_task,
+        )
