@@ -4,7 +4,8 @@ import asyncio
 import logging
 
 from enum import Enum, auto
-from mavsdk import System
+
+# from mavsdk import System
 from mavsdk.telemetry import Position
 from mavsdk.action import OrbitYawBehavior
 
@@ -28,12 +29,7 @@ class DroneStatus(Enum):
     LANDED = auto()
 
 
-class Sim(object):
-    # x3: System = None
-    # # x500: System = None
-    # comms_drone: System = None
-    # xlab550: System = None
-
+class DemoController(object):
     def __init__(self):
         self.status = {}
         self.status_conditions = {}
@@ -50,48 +46,9 @@ class Sim(object):
             condition.notify_all()
 
     async def wait_for_drone_status(self, drone: Drone, target: DroneStatus) -> None:
-        """Wait until the global state becomes `target`."""
         condition = self.status_conditions[drone]
         async with condition:
             await condition.wait_for(lambda: self.status[drone] == target)
-
-    async def connect_drone(
-        self, drone_name: str, system_address: str, drone_index: int
-    ) -> System:
-        # as seen at https://discuss.px4.io/t/mavsdk-multiple-drones-problem/44693/2
-        # so I believe port 50051 is just a random starting port so that each System instance
-        # uses a different port to avoid conflicts
-        drone = System(port=50051 + drone_index)
-        try:
-            await asyncio.wait_for(
-                drone.connect(system_address=system_address), timeout=3
-            )
-            logger.debug(f"Awaiting connection to {drone_name} at {system_address}")
-        except asyncio.TimeoutError:
-            logger.error(f"Error connecting to {drone_name} at {system_address}!")
-            logger.error("X500 drone connection failed, aborting swarm demo.")
-            exit(1)
-        logger.debug(f"Connection await complete to {drone_name}.")
-
-        async for state in drone.core.connection_state():
-            logger.debug(f"Connection state for {drone_name}:")
-            logger.debug(f"{state=}")
-            if state.is_connected:
-                logger.debug(f"Drone {drone_name} discovered!")
-                break
-        logger.debug(f"Connection state for drone {drone_name} complete.")
-
-        logger.debug(
-            f"Waiting for drone {drone_name} to have a global position estimate..."
-        )
-        async for health in drone.telemetry.health():
-            if health.is_global_position_ok and health.is_home_position_ok:
-                logger.debug(f"-- Global position estimate OK for drone {drone_name}")
-                break
-
-        logger.info(f"{drone_name} initialized, starting mission...")
-
-        return drone
 
     async def get_one_position(self, drone: Drone) -> Position:
         async for pos in drone.mavsdk_system.telemetry.position():
@@ -173,14 +130,14 @@ class Sim(object):
                 break
             await asyncio.sleep(check_freqency_sec)
 
-    async def comms_drone_mission(self) -> None:
+    async def comms_drone_mission(self, drone: Drone) -> None:
         logger.info("comms_drone: Arming")
-        await self.comms_drone.action.arm()
-        await self.set_drone_status(self.comms_drone, DroneStatus.ARMED)
+        await drone.mavsdk_system.action.arm()
+        await self.set_drone_status(drone, DroneStatus.ARMED)
 
         logger.info("comms_drone: Taking Off")
-        await self.comms_drone.action.takeoff()
-        await self.set_drone_status(self.comms_drone, DroneStatus.IN_AIR)
+        await drone.mavsdk_system.action.takeoff()
+        await self.set_drone_status(drone, DroneStatus.IN_AIR)
         # The VTOL can go to specific locations, the fixed wing drone cannot
 
         # await drone_goto(
@@ -201,7 +158,7 @@ class Sim(object):
         # )
 
         logger.info("comms_drone: Entering orbit over firestation")
-        await self.comms_drone.action.do_orbit(
+        await drone.mavsdk_system.action.do_orbit(
             radius_m=18,
             velocity_ms=2,
             yaw_behavior=OrbitYawBehavior.HOLD_FRONT_TANGENT_TO_CIRCLE,
@@ -210,7 +167,7 @@ class Sim(object):
             absolute_altitude_m=30.0,
         )
 
-    async def x3_mission(self) -> None:
+    async def x3_mission(self, drone: Drone) -> None:
         # Wait for VTOL to be in position above firestation
         # await wait_for_drone_status(sim, sim.xlab550, DroneStatus.LOOKING_AT_FIRESTATION)
         # Update: We want to show drones acting concurrently, so don't wait for VTOL
@@ -219,24 +176,22 @@ class Sim(object):
         await asyncio.sleep(15)
 
         logger.info("x3: Arming")
-        await self.x3.action.arm()
-        await self.set_drone_status(self.x3, DroneStatus.ARMED)
+        await drone.mavsdk_system.action.arm()
+        await self.set_drone_status(drone, DroneStatus.ARMED)
 
         logger.info("x3: Taking Off")
-        await self.x3.action.takeoff()
-        await self.set_drone_status(self.x3, DroneStatus.IN_AIR)
+        await drone.mavsdk_system.action.takeoff()
+        await self.set_drone_status(drone, DroneStatus.IN_AIR)
 
         await self.drone_goto(
-            self,
-            self.x3,
+            drone,
             altitude_m=25.0,
             status_at_completion=DroneStatus.ABOVE_LAUNCH_SITE,
         )
 
         logger.info("x3 fly to firestation")
         await self.drone_goto(
-            self,
-            self.x3,
+            drone,
             latitude_deg=32.061566,
             longitude_deg=118.779284,
             altitude_m=30.0,
@@ -246,8 +201,7 @@ class Sim(object):
 
         logger.info("x3 look in firestation")
         await self.drone_goto(
-            self,
-            self.x3,
+            drone,
             latitude_deg=32.061566,
             longitude_deg=118.779284,
             altitude_m=3.0,
@@ -257,8 +211,7 @@ class Sim(object):
 
         logger.info("x3 fly in firestation")
         await self.drone_goto(
-            self,
-            self.x3,
+            drone,
             latitude_deg=32.061467,
             longitude_deg=118.779241,
             altitude_m=3.0,
@@ -268,8 +221,7 @@ class Sim(object):
 
         logger.info("x3 look around firestation")
         await self.drone_goto(
-            self,
-            self.x3,
+            drone,
             yaw_deg=300.0,
         )
 
@@ -277,16 +229,14 @@ class Sim(object):
 
         logger.info("x3 look around firestation")
         await self.drone_goto(
-            self,
-            self.x3,
+            drone,
             yaw_deg=60.0,
         )
 
         await asyncio.sleep(10)
         logger.info("x3 look around firestation")
         await self.drone_goto(
-            self,
-            self.x3,
+            drone,
             altitude_m=3.0,
             yaw_deg=170.0,
         )
@@ -295,8 +245,7 @@ class Sim(object):
 
         logger.info("x3 fly out firestation")
         await self.drone_goto(
-            self,
-            self.x3,
+            drone,
             latitude_deg=32.061398,
             longitude_deg=118.779249,
             altitude_m=2.6,
@@ -306,7 +255,7 @@ class Sim(object):
 
         await asyncio.sleep(15)
 
-        await self.x3.action.return_to_launch()
+        await drone.mavsdk_system.action.return_to_launch()
 
         logger.info("x3 returning to land")
 
@@ -320,11 +269,11 @@ class Sim(object):
 
         logger.info("x500 Arming")
         await drone.mavsdk_system.action.arm()
-        await self.set_drone_status(drone.mavsdk_system, DroneStatus.ARMED)
+        await self.set_drone_status(drone, DroneStatus.ARMED)
 
         logger.info("x500 Taking Off")
         await drone.mavsdk_system.action.takeoff()
-        await self.set_drone_status(drone.mavsdk_system, DroneStatus.IN_AIR)
+        await self.set_drone_status(drone, DroneStatus.IN_AIR)
         await self.drone_goto(
             drone,
             altitude_m=25.0,
@@ -351,7 +300,7 @@ class Sim(object):
             status_at_completion=DroneStatus.LOOKING_AT_FIRESTATION,
         )
 
-    async def xlab550_mission(self) -> None:
+    async def xlab550_mission(self, drone: Drone) -> None:
         # Wait for VTOL to be in position above firestation
         # await wait_for_drone_status(sim, sim.vtol, DroneStatus.ABOVE_FIRESTATION)
         # Update: We want to show drones acting concurrently, so don't wait for VTOL
@@ -360,27 +309,25 @@ class Sim(object):
         await asyncio.sleep(10)
 
         logger.info("xlab550: Arming")
-        await self.xlab550.action.arm()
-        await self.set_drone_status(self.xlab550, DroneStatus.ARMED)
+        await drone.mavsdk_system.action.arm()
+        await self.set_drone_status(drone, DroneStatus.ARMED)
 
         logger.info("xlab550: Taking Off")
-        await self.xlab550.action.takeoff()
-        await self.set_drone_status(self.xlab550, DroneStatus.IN_AIR)
+        await drone.mavsdk_system.action.takeoff()
+        await self.set_drone_status(drone, DroneStatus.IN_AIR)
         logger.info("xlab550: Climbing to 30m")
         await self.drone_goto(
-            self,
-            self.xlab550,
+            drone,
             altitude_m=30.0,
             status_at_completion=DroneStatus.ABOVE_LAUNCH_SITE,
         )
 
         logger.info("xlab550: Turn to look towards firestation")
-        await self.drone_goto(self, self.xlab550, yaw_deg=300.0)
+        await self.drone_goto(drone, yaw_deg=300.0)
 
         logger.info("xlab550: fly to firestation")
         await self.drone_goto(
-            self,
-            self.xlab550,
+            drone,
             latitude_deg=32.061265,
             longitude_deg=118.779401,
             status_at_completion=DroneStatus.ABOVE_FIRESTATION,
@@ -388,53 +335,8 @@ class Sim(object):
 
         logger.info("xlab550: look at firestation")
         await self.drone_goto(
-            self,
-            self.xlab550,
+            drone,
             altitude_m=9.0,
             yaw_deg=320.0,
             status_at_completion=DroneStatus.LOOKING_AT_FIRESTATION,
         )
-
-    # async def run_swarm_demo() -> None:
-    #     sim: Sim = Sim()
-
-    #     # Connect to all drones
-    #     drone_x500_task = asyncio.create_task(
-    #         sim.controller.connect_drone("x500", "udp://0.0.0.0:14540", 0)
-    #     )
-    #     drone_comms_drone_task = asyncio.create_task(
-    #         sim.controller.connect_drone("comms_drone", "udp://0.0.0.0:14541", 1)
-    #     )
-    #     drone_xlab550_task = asyncio.create_task(
-    #         sim.controller.connect_drone("xlab550", "udp://0.0.0.0:14542", 2)
-    #     )
-    #     drone_x3_task = asyncio.create_task(
-    #         sim.controller.connect_drone("x3", "udp://0.0.0.0:14543", 3)
-    #     )
-
-    #     (
-    #         sim.x500,
-    #         sim.comms_drone,
-    #         sim.xlab550,
-    #         sim.x3,
-    #     ) = await asyncio.gather(
-    #         drone_x500_task, drone_comms_drone_task, drone_xlab550_task, drone_x3_task
-    #     )
-
-    #     await sim.controller.set_drone_status(sim.x500, DroneStatus.CONNECTED)
-    #     await sim.controller.set_drone_status(sim.comms_drone, DroneStatus.CONNECTED)
-    #     await sim.controller.set_drone_status(sim.xlab550, DroneStatus.CONNECTED)
-    #     await sim.controller.set_drone_status(sim.x3, DroneStatus.CONNECTED)
-
-    #     # Run missions concurrently
-    #     drone_comms_drone_mission_task = asyncio.create_task(sim.comms_drone_mission())
-    #     drone_x500_mission_task = asyncio.create_task(sim.x500_mission())
-    #     drone_x3_mission_task = asyncio.create_task(sim.x3_mission())
-    #     drone_xlab550_mission_task = asyncio.create_task(sim.xlab550_mission())
-
-    #     await asyncio.gather(
-    #         drone_comms_drone_mission_task,
-    #         drone_x500_mission_task,
-    #         drone_x3_mission_task,
-    #         drone_xlab550_mission_task,
-    #     )

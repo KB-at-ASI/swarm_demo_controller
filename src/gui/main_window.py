@@ -52,12 +52,10 @@ class MainWindow(QMainWindow):
         self.closeEvent = self.on_close
 
     def on_close(self, event):
-        self.app.loop.stop()
         QApplication.instance().quit()
 
     def on_map_resize(self, event):
         super().resizeEvent(event)
-        print(f"MainWindow resized  to: {self.size()}")
 
     def createMenuBar(self):
         menu = self.menuBar()

@@ -15,6 +15,21 @@
     {
       "id": "x500",
       "url": "udp://0.0.0.0:14540",
+      "role": "SURVEILLANCE"
+    },
+    {
+      "id": "lipan",
+      "url": "udp://0.0.0.0:14541",
+      "role": "COMMS"
+    },
+    {
+      "id": "xlab550",
+      "url": "udp://0.0.0.0:14542",
+      "role": "SURVEILLANCE"
+    },
+    {
+      "id": "x3",
+      "url": "udp://0.0.0.0:14543",
       "role": "INSPECTOR"
     }
   ]

@@ -7,7 +7,7 @@ from mavsdk.telemetry import Position
 
 from mavsdk import System
 
-from controller.demo_controller import Sim
+from controller.demo_controller import DemoController
 
 # TODO: Separate mavsdk specifics from controller logic
 
@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 class SwarmController:
     def __init__(self, scenario_spec: str | None = None):
         self.drones = {}
-        # TODO: remove dependency on Sim
-        self.sim = Sim()
+
+        self.demo_controller = DemoController()
         if scenario_spec:
             self.load_scenario(scenario_spec)
 
@@ -123,9 +123,31 @@ class SwarmController:
         return drone_system
 
     async def deploy_swarm(self) -> None:
+        # run demo
+
         x500 = self.get_drone_by_id("x500")
-        drone_x500_mission_task = asyncio.create_task(self.sim.x500_mission(drone=x500))
+        drone_x500_mission_task = asyncio.create_task(
+            self.demo_controller.x500_mission(drone=x500)
+        )
+
+        x3 = self.get_drone_by_id("x3")
+        drone_x3_mission_task = asyncio.create_task(
+            self.demo_controller.x3_mission(drone=x3)
+        )
+
+        lipan = self.get_drone_by_id("lipan")
+        drone_lipan_mission_task = asyncio.create_task(
+            self.demo_controller.comms_drone_mission(drone=lipan)
+        )
+
+        xlab550 = self.get_drone_by_id("xlab550")
+        drone_xlab550_mission_task = asyncio.create_task(
+            self.demo_controller.xlab550_mission(drone=xlab550)
+        )
 
         await asyncio.gather(
             drone_x500_mission_task,
+            drone_x3_mission_task,
+            drone_lipan_mission_task,
+            drone_xlab550_mission_task,
         )
