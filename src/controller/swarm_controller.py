@@ -27,6 +27,7 @@ class SwarmController:
                 drone = Drone(
                     drone_id=drone_spec["id"],
                     connection_url=drone_spec["url"],
+                    role=drone_spec.get("role", "UNASSIGNED"),
                 )
                 self.add_drone(drone)
 
@@ -63,7 +64,11 @@ class SwarmController:
             except Exception as e:
                 logger.error(f"Failed to connect to drone {drone.drone_id}: {e}")
 
-    async def connect_drone(self, drone: Drone) -> System:
+    async def connect_drone(
+        self, drone: Drone, initialize_state: bool = True
+    ) -> System:
+        drone.set_status(DroneStatus.CONNECTING)
+
         # as seen at https://discuss.px4.io/t/mavsdk-multiple-drones-problem/44693/2
         # so I believe port 50051 is just a random starting port so that each System instance
         # uses a different port to avoid conflicts
@@ -79,6 +84,7 @@ class SwarmController:
         except asyncio.TimeoutError:
             logger.error(f"Error connecting to {drone_name} at {system_address}!")
             logger.error(f"{drone_name} connection failed!")
+            drone.set_status(DroneStatus.DISCONNECTED)
             raise Exception(f"Error connecting to {drone_name}.")
         logger.debug(f"Connection await complete to {drone_name}.")
 
@@ -91,6 +97,7 @@ class SwarmController:
             else:
                 logger.error(f"Error awaiting connection state for {drone_name}!")
                 logger.error(f"{drone_name} connection failed!")
+                drone.set_status(DroneStatus.DISCONNECTED)
                 raise Exception(f"Error connecting to {drone_name}.")
         logger.debug(f"Connection state for drone {drone_name} complete.")
 
@@ -104,4 +111,8 @@ class SwarmController:
 
         drone.mavsdk_system = drone_system
         drone.set_status(DroneStatus.CONNECTED)
+
+        if initialize_state:
+            await drone.initialize_state()
+
         return drone_system

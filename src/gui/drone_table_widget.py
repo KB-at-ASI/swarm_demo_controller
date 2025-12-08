@@ -79,13 +79,6 @@ class DroneListWidget(QWidget):
             )
             self.table.setItem(row, 2, QTableWidgetItem(drone.status.name))
 
-    # def populate(self, drones: List[Drone]) -> None:
-    #     self.table.setRowCount(len(drones))
-    #     for i, d in enumerate(drones):
-    #         self.table.setItem(i, 0, QTableWidgetItem(d.name))
-    #         self.table.setItem(i, 1, QTableWidgetItem(d.role))
-    #         self.table.setItem(i, 2, QTableWidgetItem(d.mode))
-
     def drone_status_changed(self, drone: Drone, new_status) -> None:
         # find the row for this drone and update status
         for r in range(self.table.rowCount()):

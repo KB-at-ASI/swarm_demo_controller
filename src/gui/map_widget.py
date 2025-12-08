@@ -3,6 +3,7 @@ import json
 import os
 from typing import List, Tuple
 from controller.swarm_controller import SwarmController
+from model.drone import Drone
 import util.geo_tools as geo_tools
 
 from PySide6.QtCore import Qt, Signal, QPointF
@@ -16,15 +17,6 @@ from PySide6.QtWidgets import (
     QGraphicsTextItem,
     QLabel,
 )
-
-
-@dataclass
-class Drone:
-    name: str
-    role: str
-    mode: str
-    latitude: float
-    longitude: float
 
 
 class LatLonLabel(QLabel):
@@ -105,6 +97,9 @@ class MapWidget(QGraphicsView):
             self.set_pixmap(pix)
             self.img_to_latlon_mapping = geo_tools.default_affine_transform()
 
+        for drone in controller.get_all_drones():
+            drone.add_state_listener(self)
+
     def load_scenario(self, scenario_spec: json) -> None:
         if scenario_spec.get("map_image"):
             image_path = scenario_spec["map_image"]
@@ -130,12 +125,6 @@ class MapWidget(QGraphicsView):
         self.bounds = (min_lat, max_lat, min_lon, max_lon)
 
     def latlon_to_point(self, lat: float, lon: float) -> QPointF:
-        # min_lat, max_lat, min_lon, max_lon = self.bounds
-        # rect = self.pixmap_item.boundingRect()
-        # x = (lon - min_lon) / (max_lon - min_lon) * rect.width()
-        # # invert y: image y increases downward
-        # y = (max_lat - lat) / (max_lat - min_lat) * rect.height()
-
         x, y = geo_tools.latlon_to_img_x_y(self.img_to_latlon_mapping, lat, lon)
         return QPointF(x, y)
 
@@ -144,32 +133,30 @@ class MapWidget(QGraphicsView):
             self.img_to_latlon_mapping, pt.x(), pt.y()
         )
 
-        # min_lat, max_lat, min_lon, max_lon = self.bounds
-        # rect = self.pixmap_item.boundingRect()
-        # lon = min_lon + (pt.x() / rect.width()) * (max_lon - min_lon)
-        # lat = max_lat - (pt.y() / rect.height()) * (max_lat - min_lat)
         return lat, lon
 
-    def set_drones(self, drones: List[Drone]) -> None:
-        # Remove previous drone items
-        for name, (ellipse, label) in self.drones_items.items():
-            self.scene.removeItem(ellipse)
-            self.scene.removeItem(label)
-        self.drones_items.clear()
+    def drone_state_changed(self, drone: Drone) -> None:
+        self.update_drone_marker(drone)
 
-        for d in drones:
-            pt = self.latlon_to_point(d.latitude, d.longitude)
-            ellipse = QGraphicsEllipseItem(pt.x() - 6, pt.y() - 6, 12, 12)
-            ellipse.setBrush(QBrush(QColor("#2b8cbe")))
-            ellipse.setPen(QPen(Qt.black))
-            label = QGraphicsTextItem()
-            label.setHtml(
-                f'<div style="color: black; font-size: 12px; background-color: white;">{d.name}</div>'
-            )
-            label.setPos(pt.x() + 8, pt.y() - 8)
-            self.scene.addItem(ellipse)
-            self.scene.addItem(label)
-            self.drones_items[d.name] = (ellipse, label)
+    def update_drone_marker(self, drone: Drone) -> None:
+        # Remove previous drone items
+        if drone.drone_id in self.drones_items:
+            old_ellipse, old_label = self.drones_items[drone.drone_id]
+            self.scene.removeItem(old_ellipse)
+            self.scene.removeItem(old_label)
+
+        pt = self.latlon_to_point(drone.lat, drone.lon)
+        ellipse = QGraphicsEllipseItem(pt.x() - 6, pt.y() - 6, 12, 12)
+        ellipse.setBrush(QBrush(QColor("#2b8cbe")))
+        ellipse.setPen(QPen(Qt.black))
+        label = QGraphicsTextItem()
+        label.setHtml(
+            f'<div style="color: black; font-size: 12px; background-color: white;">{drone.drone_id}</div>'
+        )
+        label.setPos(pt.x() + 8, pt.y() - 8)
+        self.scene.addItem(ellipse)
+        self.scene.addItem(label)
+        self.drones_items[drone.drone_id] = (ellipse, label)
 
     def highlight_drones(self, names: List[str]) -> None:
         for name, (ellipse, label) in self.drones_items.items():

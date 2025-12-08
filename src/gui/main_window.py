@@ -94,13 +94,6 @@ class CentralWidget(QWidget):
         layout = QHBoxLayout(self)
         layout.addWidget(splitter)
 
-        # populate drones
-        # self.drones = make_sample_drones()
-        # drone_list_widget.populate(self.drones)
-
-        # TODO: populate map with drones
-        # self.map_widget.set_drones(self.drones)
-
         # connect events
         # map widget shows lat/lon inset itself; keep the signal connected only
         # for optional future uses but do not update the drone_list status here.
@@ -109,12 +102,6 @@ class CentralWidget(QWidget):
         # connect selection and deploy signals from the DroneListWidget
         drone_list_widget.table.itemSelectionChanged.connect(self.on_selection_changed)
         drone_list_widget.deploy_btn.clicked.connect(self.on_deploy)
-        # expose for use in other methods
-        self.drone_list = drone_list_widget
-
-    def _populate_table(self, drones):
-        # kept for compatibility (not used currently)
-        self.drone_list.populate(drones)
 
     def on_mouse_moved(self, lat: float, lon: float) -> None:
         # This handler is kept as a no-op so
@@ -122,17 +109,19 @@ class CentralWidget(QWidget):
         return
 
     def on_location_selected(self, lat: float, lon: float) -> None:
-        self.drone_list.status.setText(f"Mission location set: {lat:.6f}, {lon:.6f}")
+        self.drone_list_widget.status.setText(
+            f"Mission location set: {lat:.6f}, {lon:.6f}"
+        )
         # draw lines to current selection
         self.on_selection_changed()
 
     def on_selection_changed(self) -> None:
-        selected = self.drone_list.get_selected_drone_ids()
+        selected = self.drone_list_widget.get_selected_drone_ids()
         self.map_widget.highlight_drones(selected)
         self.map_widget.draw_lines_to_selected(selected)
 
     def on_deploy(self) -> None:
-        selected = self.drone_list.get_selected_drone_ids()
+        selected = self.drone_list_widget.get_selected_drone_ids()
         # get mission location (if any)
         if self.map_widget.mission_point:
             center = self.map_widget.mission_point.rect().center()
