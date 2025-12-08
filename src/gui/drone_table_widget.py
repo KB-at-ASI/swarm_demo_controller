@@ -10,7 +10,11 @@ from PySide6.QtWidgets import (
     QLabel,
     QHeaderView,
     QSizePolicy,
+    QHBoxLayout,
 )
+
+
+from controller.swarm_controller import SwarmController
 
 from .map_widget import Drone
 
@@ -21,7 +25,7 @@ class DroneListWidget(QWidget):
     The table is configured to always fill the widget's width.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, controller: SwarmController | None = None, parent=None):
         super().__init__(parent)
 
         self.table = QTableWidget(0, 3)
@@ -44,25 +48,64 @@ class DroneListWidget(QWidget):
             "QTableWidget::item:selected { color: black; background-color: lightgray; }"
         )
 
+        # Make a bar of buttons
+        button_bar = QWidget()
+        button_layout = QHBoxLayout(button_bar)
+
+        self.connect_btn = QPushButton("Connect All Drones")
+        self.connect_btn.clicked.connect(self.on_connect_clicked)
+        button_layout.addWidget(self.connect_btn)
+
         self.deploy_btn = QPushButton("Deploy Swarm")
+        self.deploy_btn.clicked.connect(self.on_deploy_clicked)
+        button_layout.addWidget(self.deploy_btn)
+
         self.status = QLabel("")
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.table)
-        layout.addWidget(self.deploy_btn)
+        layout.addWidget(button_bar)
         layout.addWidget(self.status, alignment=Qt.AlignRight)
         layout.setContentsMargins(4, 4, 4, 4)
 
-    def populate(self, drones: List[Drone]) -> None:
-        self.table.setRowCount(len(drones))
-        for i, d in enumerate(drones):
-            self.table.setItem(i, 0, QTableWidgetItem(d.name))
-            self.table.setItem(i, 1, QTableWidgetItem(d.role))
-            self.table.setItem(i, 2, QTableWidgetItem(d.mode))
+        self.controller = controller
+        for drone in controller.get_all_drones():
+            drone.add_status_listener(self)
+            self.table.insertRow(self.table.rowCount())
+            row = self.table.rowCount() - 1
+            self.table.setItem(row, 0, QTableWidgetItem(drone.drone_id))
+            self.table.setItem(
+                row, 1, QTableWidgetItem(drone.role if drone.role else "")
+            )
+            self.table.setItem(row, 2, QTableWidgetItem(drone.status.name))
 
-    def selected_names(self) -> List[str]:
+    # def populate(self, drones: List[Drone]) -> None:
+    #     self.table.setRowCount(len(drones))
+    #     for i, d in enumerate(drones):
+    #         self.table.setItem(i, 0, QTableWidgetItem(d.name))
+    #         self.table.setItem(i, 1, QTableWidgetItem(d.role))
+    #         self.table.setItem(i, 2, QTableWidgetItem(d.mode))
+
+    def drone_status_changed(self, drone: Drone, new_status) -> None:
+        # find the row for this drone and update status
+        for r in range(self.table.rowCount()):
+            if self.table.item(r, 0).text() == drone.drone_id:
+                self.table.setItem(r, 2, QTableWidgetItem(new_status.name))
+                break
+            else:
+                pass
+
+    def get_selected_drone_ids(self) -> List[str]:
         return [
             self.table.item(r, 0).text()
             for r in range(self.table.rowCount())
             if self.table.item(r, 0) and self.table.item(r, 0).isSelected()
         ]
+
+    def on_connect_clicked(self) -> None:
+        # selected = self.get_selected_drone_ids()
+        # self.status.setText(f"Connect clicked for: {', '.join(selected)}")
+        self.controller.connect_all_drones()
+
+    def on_deploy_clicked(self) -> None:
+        self.status.setText("Deploy clicked")

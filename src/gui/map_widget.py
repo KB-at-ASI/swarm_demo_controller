@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import json
 import os
 from typing import List, Tuple
+from controller.swarm_controller import SwarmController
 import util.geo_tools as geo_tools
 
 from PySide6.QtCore import Qt, Signal, QPointF
@@ -26,17 +27,40 @@ class Drone:
     longitude: float
 
 
+class LatLonLabel(QLabel):
+    """A QLabel that displays lat/lon coordinates."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet(
+            "background: rgba(0,0,0,0.6); color: white; padding: 4px; border-radius: 4px;"
+        )
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.hide()
+
+    def set_lat_lon(self, lat, lon) -> None:
+        if lat is None or lon is None:
+            return
+        self.setText(f"{lat:.6f}, {lon:.6f}")
+        self.adjustSize()
+
+
 class MapWidget(QGraphicsView):
     """A simple map widget that displays a background image, drone markers,
-    and allows selecting a mission location by clicking.
 
-    The lat/lon mapping is linear and configured with `bounds`.
+    The lat/lon mapping is an affine transformation, handled separately from the QGraphicsView.
+    The QGraphicsView transformation is only for zooming/panning the view. The scene coordinates
+    correspond directly to image pixel coordinates of the map image.
     """
 
     mouseMoved = Signal(float, float)
     locationSelected = Signal(float, float)
 
-    def __init__(self, map_path: str | None = None, parent=None):
+    def __init__(
+        self,
+        controller: SwarmController | None = None,
+        parent=None,
+    ):
         super().__init__(parent)
         # Use QPainter render hint for antialiasing (correct PySide6 API)
         self.setRenderHint(QPainter.Antialiasing)
@@ -50,15 +74,15 @@ class MapWidget(QGraphicsView):
         self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
         self.setMouseTracking(True)
 
+        # always show scrollbars
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+
         # Floating lat/lon inset (lower-right). Use a QLabel overlay so it
         # doesn't scale with the scene or block mouse events.
-        self.coord_label = QLabel(self)
-        self.coord_label.setStyleSheet(
-            "background: rgba(0,0,0,0.6); color: white; padding: 4px; border-radius: 4px;"
-        )
-        self.coord_label.setAttribute(Qt.WA_TransparentForMouseEvents)
-        self.coord_label.hide()
+        self.coord_label = LatLonLabel(self)
 
+        # Map scene
         self.scene = QGraphicsScene(self)
         self.setScene(self.scene)
 
@@ -72,8 +96,8 @@ class MapWidget(QGraphicsView):
         # These can be tuned to match the map image used.
         self.bounds = (32.0605, 32.0625, 118.7780, 118.7805)
 
-        if map_path:
-            self.load_map(map_path)
+        if controller.scenario_spec:
+            self.load_scenario(controller.scenario_spec)
         else:
             # blank pixmap placeholder
             pix = QPixmap(800, 600)
@@ -81,19 +105,17 @@ class MapWidget(QGraphicsView):
             self.set_pixmap(pix)
             self.img_to_latlon_mapping = geo_tools.default_affine_transform()
 
-    def load_map(self, path: str) -> None:
-        map_spec = json.loads(open(path).read())
-
-        if map_spec.get("map_image"):
-            image_path = map_spec["map_image"]
+    def load_scenario(self, scenario_spec: json) -> None:
+        if scenario_spec.get("map_image"):
+            image_path = scenario_spec["map_image"]
             if not os.path.isfile(image_path):
                 raise ValueError("Image file does not exist")
             pixmap = QPixmap(image_path)
             self.set_pixmap(pixmap)
 
-        if map_spec.get("pixel to lat/lon mapping"):
+        if scenario_spec.get("pixel to lat/lon mapping"):
             # TODO: implement pixel to lat/lon mapping
-            pt_pairs = map_spec["pixel to lat/lon mapping"]["point_pairs"]
+            pt_pairs = scenario_spec["pixel to lat/lon mapping"]["point_pairs"]
             self.img_to_latlon_mapping = geo_tools.compute_affine_transform(pt_pairs)
 
     def set_pixmap(self, pix: QPixmap) -> None:
@@ -170,15 +192,8 @@ class MapWidget(QGraphicsView):
         scene_pt = self.mapToScene(event.pos())
         lat, lon = self.point_to_latlon(scene_pt)
         # update inset label
-        self.coord_label.setText(f"{lat:.6f}, {lon:.6f}")
-        self.coord_label.adjustSize()
-        margin = 8
-        vw = self.viewport().width()
-        vh = self.viewport().height()
-        lw = self.coord_label.width()
-        lh = self.coord_label.height()
-        # place in lower-right corner of the viewport
-        self.coord_label.move(vw - lw - margin, vh - lh - margin)
+        self.coord_label.set_lat_lon(lat, lon)
+        self._reposition_latlon_label()
         self.coord_label.show()
 
         self.mouseMoved.emit(lat, lon)
@@ -221,6 +236,9 @@ class MapWidget(QGraphicsView):
     def resizeEvent(self, event):
         # Keep the inset positioned in the lower-right when the view resizes
         super().resizeEvent(event)
+        self._reposition_latlon_label()
+
+    def _reposition_latlon_label(self):
         if self.coord_label and not self.coord_label.isHidden():
             margin = 8
             vw = self.viewport().width()

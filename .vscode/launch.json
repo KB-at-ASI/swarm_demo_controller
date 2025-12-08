@@ -1,0 +1,20 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Run Swarm Controller",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/swarm_controller_app.py",
+      "args": ["assets/demo_scenario.json"],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true // Optional: Set to false to debug library code as well
+    }
+  ]
+}

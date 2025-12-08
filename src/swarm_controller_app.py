@@ -8,6 +8,7 @@ Usage:
 
 import sys
 
+from controller.swarm_controller import SwarmController
 from gui.main_window import run
 import os
 
@@ -19,7 +20,9 @@ DEFAULT_MAP = os.path.join(
 
 if __name__ == "__main__":
     # Use provided image path if given, otherwise try the bundled assets/demo_map.png
-    img = sys.argv[1] if len(sys.argv) > 1 else None
-    if img is None and os.path.exists(DEFAULT_MAP):
-        img = os.path.normpath(DEFAULT_MAP)
-    run(img)
+    scenario_spec_path = sys.argv[1] if len(sys.argv) > 1 else None
+    if scenario_spec_path is None and os.path.exists(DEFAULT_MAP):
+        scenario_spec_path = os.path.normpath(DEFAULT_MAP)
+
+    controller: SwarmController = SwarmController(scenario_spec_path)
+    run(controller)
