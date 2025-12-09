@@ -139,7 +139,7 @@ class DemoController(object):
         drone.set_status(DroneStatus.ARMED)
 
         # Set a faster state update rate for the communications drone
-        drone.set_state_update_rate(0.2)
+        drone.set_state_update_rate(0.1)
 
         logger.info("comms_drone: Taking Off")
         await drone.mavsdk_system.action.takeoff()
@@ -224,6 +224,7 @@ class DemoController(object):
             altitude_m=3.0,
             yaw_deg=200.0,
             status_at_completion=DemoDroneStatus.LOOKING_AT_FIRESTATION,
+            altitude_epsilon=0.2,
         )
 
         logger.info("x3 fly in firestation")
@@ -239,6 +240,7 @@ class DemoController(object):
         logger.info("x3 look around firestation")
         await self.drone_goto(
             drone,
+            altitude_m=3.0,
             yaw_deg=300.0,
         )
 
@@ -247,6 +249,7 @@ class DemoController(object):
         logger.info("x3 look around firestation")
         await self.drone_goto(
             drone,
+            altitude_m=3.0,
             yaw_deg=60.0,
         )
 
@@ -338,21 +341,20 @@ class DemoController(object):
         await self.set_drone_status(drone, DemoDroneStatus.IN_AIR)
         drone.set_status(DroneStatus.AIRBORNE)
 
-        logger.info("xlab550: Climbing to 30m")
+        logger.info("xlab550: Climbing to 30m and turning to look at firestation")
         await self.drone_goto(
             drone,
-            altitude_m=30.0,
+            altitude_m=20.0,
+            yaw_deg=300.0,
             status_at_completion=DemoDroneStatus.ABOVE_LAUNCH_SITE,
         )
-
-        logger.info("xlab550: Turn to look towards firestation")
-        await self.drone_goto(drone, yaw_deg=300.0)
 
         logger.info("xlab550: fly to firestation")
         await self.drone_goto(
             drone,
             latitude_deg=32.061265,
             longitude_deg=118.779401,
+            altitude_m=30.0,
             status_at_completion=DemoDroneStatus.ABOVE_FIRESTATION,
         )
 
