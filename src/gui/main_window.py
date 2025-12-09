@@ -1,5 +1,4 @@
 import sys
-from typing import List
 
 from PySide6.QtCore import Qt
 
@@ -17,18 +16,8 @@ from PySide6.QtWidgets import QMessageBox
 
 from controller.swarm_controller import SwarmController
 
-from .map_widget import MapWidget, Drone
+from .map_widget import MapWidget
 from .drone_table_widget import DroneListWidget
-
-
-# def make_sample_drones() -> List[Drone]:
-#     # Hard-coded sample drones (matches positions used in `swarm_demo.py` area)
-#     return [
-#         Drone("x500", "SURVEILLANCE", "DISARMED", 32.061566, 118.779284),
-#         Drone("vtol", "COMMS", "DISARMED", 32.061531, 118.779481),
-#         Drone("xlab550", "SURVEILLANCE", "DISARMED", 32.061265, 118.779401),
-#         Drone("x3", "INSPECTION", "DISARMED", 32.061398, 118.779249),
-#     ]
 
 
 class MainWindow(QMainWindow):
