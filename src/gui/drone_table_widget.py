@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 
 from controller.swarm_controller import SwarmController
 
-from model.drone import Drone
+from model.drone import Drone, DroneStatus
 
 
 class DroneListWidget(QWidget):
@@ -81,16 +81,25 @@ class DroneListWidget(QWidget):
             self.table.setItem(
                 row, 1, QTableWidgetItem(drone.role if drone.role else "")
             )
-            self.table.setItem(row, 2, QTableWidgetItem(drone.status.name))
+            self._set_drone_status(drone, drone.status)
 
-    def drone_status_changed(self, drone: Drone, new_status) -> None:
-        # find the row for this drone and update status
+    def drone_status_changed(self, drone: Drone, new_status: DroneStatus) -> None:
+        self._set_drone_status(drone, new_status)
+
+    def _set_drone_status(self, drone: Drone, status: DroneStatus) -> None:
+        default_bg_color = self.table.palette().color(self.table.backgroundRole())
+
         for r in range(self.table.rowCount()):
             if self.table.item(r, 0).text() == drone.drone_id:
-                self.table.setItem(r, 2, QTableWidgetItem(new_status.name))
-                break
-            else:
-                pass
+                # if status is DroneStatus.DISCONNECTED, set background to dark grey
+                item = QTableWidgetItem(status.name)
+                if status == DroneStatus.DISCONNECTED:
+                    item.setBackground(Qt.darkGray)
+                elif status == DroneStatus.CONNECTING:
+                    item.setBackground(Qt.lightGray)
+                else:
+                    item.setBackground(default_bg_color)
+                self.table.setItem(r, 2, item)
 
     def get_selected_drone_ids(self) -> List[str]:
         return [
