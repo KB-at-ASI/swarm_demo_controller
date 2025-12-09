@@ -135,7 +135,7 @@ class SwarmController:
             self.demo_controller.x3_mission(drone=x3)
         )
 
-        lipan = self.get_drone_by_id("lipan")
+        lipan = self.get_drone_by_id("fixed_wing_comms_drone")
         drone_lipan_mission_task = asyncio.create_task(
             self.demo_controller.comms_drone_mission(drone=lipan)
         )
