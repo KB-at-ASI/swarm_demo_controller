@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 import json
 import os
 from typing import List, Tuple
@@ -98,7 +97,14 @@ class MapWidget(QGraphicsView):
             self.img_to_latlon_mapping = geo_tools.default_affine_transform()
 
         for drone in controller.get_all_drones():
-            drone.add_state_listener(self)
+            drone.add_state_change_callback(self.drone_state_changed)
+
+        if controller.scenario_spec.get("center_view_coordinates"):
+            center_coords = controller.scenario_spec["center_view_coordinates"]
+            center_lat = center_coords["lat"]
+            center_lon = center_coords["lon"]
+            centerPoint = self.latlon_to_point(center_lat, center_lon)
+            self.centerOn(centerPoint)
 
     def load_scenario(self, scenario_spec: json) -> None:
         if scenario_spec.get("map_image"):

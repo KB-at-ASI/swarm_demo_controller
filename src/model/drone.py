@@ -28,21 +28,21 @@ class Drone(object):
         self.heading: float | None = None
         self.status: DroneStatus = DroneStatus.DISCONNECTED
         self.mavsdk_system: MAVSDKSystem = None  # to be set when connected
-        self.status_listeners = []
-        self.state_listeners = []
+        self.status_change_callbacks = []
+        self.state_change_callbacks = []
         self._state_update_task = None
-        self._state_update_rate = 1.0  # seconds
+        self._state_update_rate = 0.5  # seconds
 
-    def add_status_listener(self, listener) -> None:
-        self.status_listeners.append(listener)
+    def add_status_change_callback(self, callback_fn) -> None:
+        self.status_change_callbacks.append(callback_fn)
 
-    def add_state_listener(self, listener) -> None:
-        self.state_listeners.append(listener)
+    def add_state_change_callback(self, callback_fn) -> None:
+        self.state_change_callbacks.append(callback_fn)
 
     def set_status(self, new_status: DroneStatus) -> None:
         self.status = new_status
-        for listener in self.status_listeners:
-            listener.drone_status_changed(self, new_status)
+        for callback in self.status_change_callbacks:
+            callback(self, new_status)
 
     def set_state(
         self,
@@ -55,8 +55,8 @@ class Drone(object):
         self.lon = lon if lon is not None else self.lon
         self.alt = alt if alt is not None else self.alt
         self.heading = heading if heading is not None else self.heading
-        for listener in self.state_listeners:
-            listener.drone_state_changed(self)
+        for callback in self.state_change_callbacks:
+            callback(self)
 
     async def initialize_state(self) -> None:
         pos = await self.get_one_position()
@@ -68,11 +68,13 @@ class Drone(object):
             heading=heading,
         )
 
+    def get_state_update_rate(self) -> float | None:
+        if self._state_update_rate is None:
+            return None
+        return self._state_update_rate
+
     def set_state_update_rate(self, rate_seconds: float) -> None:
         self._state_update_rate = rate_seconds
-        if self._state_update_task is not None:
-            self.stop_periodic_state_update()
-            self.start_periodic_state_update()
 
     def start_periodic_state_update(self) -> None:
         if self._state_update_task is None:
@@ -93,6 +95,11 @@ class Drone(object):
                 alt=pos.absolute_altitude_m if pos else None,
                 heading=heading,
             )
+
+            if self.drone_id == "lipan":
+                fwmetrics = await self.get_fixedwing_metrics()
+                print(f"Fixed wing metrics: {fwmetrics}")
+
             await asyncio.sleep(self._state_update_rate)
 
     async def get_one_position(self) -> Position:
@@ -108,3 +115,11 @@ class Drone(object):
 
         async for heading in self.mavsdk_system.telemetry.heading():
             return heading.heading_deg
+
+    async def get_fixedwing_metrics(self) -> dict:
+        if self.mavsdk_system is None:
+            return {}
+        async for (
+            fixed_wing_metrics
+        ) in self.mavsdk_system.telemetry.fixedwing_metrics():
+            return fixed_wing_metrics

@@ -11,6 +11,10 @@
       [829, 798, 32.06271, 118.778114]
     ]
   },
+  "center_view_coordinates": {
+    "lat": 32.0617481688328,
+    "lon": 118.77954378672322
+  },
   "drones": [
     {
       "id": "x500",
@@ -18,7 +22,7 @@
       "role": "SURVEILLANCE"
     },
     {
-      "id": "lipan",
+      "id": "fixed_wing_comms_drone",
       "url": "udp://0.0.0.0:14541",
       "role": "COMMS"
     },

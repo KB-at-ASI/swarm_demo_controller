@@ -3,7 +3,6 @@ import json
 import logging
 from typing import List
 from model.drone import Drone, DroneStatus
-from mavsdk.telemetry import Position
 
 from mavsdk import System
 
@@ -63,10 +62,11 @@ class SwarmController:
 
     def connect_all_drones(self) -> None:
         for drone in self.drones.values():
-            try:
-                asyncio.create_task(self.connect_drone(drone))
-            except Exception as e:
-                logger.error(f"Failed to connect to drone {drone.drone_id}: {e}")
+            if drone.status == DroneStatus.DISCONNECTED:
+                try:
+                    asyncio.create_task(self.connect_drone(drone))
+                except Exception as e:
+                    logger.error(f"Failed to connect to drone {drone.drone_id}: {e}")
 
     async def connect_drone(
         self, drone: Drone, initialize_state: bool = True

@@ -87,14 +87,14 @@ class CentralWidget(QWidget):
         self.map_widget = MapWidget(controller)
 
         # Bottom: DroneListWidget encapsulates table, status, and deploy button
-        drone_list_widget = DroneListWidget(controller)
+        self.drone_list_widget = DroneListWidget(controller)
 
         splitter.addWidget(self.map_widget)
-        splitter.addWidget(drone_list_widget)
+        splitter.addWidget(self.drone_list_widget)
 
         # Prefer map larger than the drone list initially
         # reasonable defaults for demo
-        splitter.setSizes([806, 208])
+        splitter.setSizes([806, 240])
 
         layout = QHBoxLayout(self)
         layout.addWidget(splitter)
@@ -105,7 +105,9 @@ class CentralWidget(QWidget):
         self.map_widget.mouseMoved.connect(self.on_mouse_moved)
         self.map_widget.locationSelected.connect(self.on_location_selected)
         # connect selection and deploy signals from the DroneListWidget
-        drone_list_widget.table.itemSelectionChanged.connect(self.on_selection_changed)
+        self.drone_list_widget.table.itemSelectionChanged.connect(
+            self.on_selection_changed
+        )
 
     def on_mouse_moved(self, lat: float, lon: float) -> None:
         # This handler is kept as a no-op so

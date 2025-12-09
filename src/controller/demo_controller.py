@@ -9,14 +9,14 @@ from enum import Enum, auto
 from mavsdk.telemetry import Position
 from mavsdk.action import OrbitYawBehavior
 
-from model.drone import Drone
+from model.drone import Drone, DroneStatus
 
 # configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class DroneStatus(Enum):
+class DemoDroneStatus(Enum):
     DISCONNECTED = auto()
     CONNECTED = auto()
     ARMED = auto()
@@ -34,10 +34,10 @@ class DemoController(object):
         self.status = {}
         self.status_conditions = {}
 
-    def get_drone_status(self, drone: Drone) -> DroneStatus:
-        return self.status.get(drone)
+    # def get_drone_status(self, drone: Drone) -> DroneStatus:
+    #     return self.status.get(drone)
 
-    async def set_drone_status(self, drone: Drone, status: DroneStatus) -> None:
+    async def set_drone_status(self, drone: Drone, status: DemoDroneStatus) -> None:
         if drone not in self.status_conditions:
             self.status_conditions[drone] = asyncio.Condition()
         condition = self.status_conditions[drone]
@@ -45,7 +45,9 @@ class DemoController(object):
             self.status[drone] = status
             condition.notify_all()
 
-    async def wait_for_drone_status(self, drone: Drone, target: DroneStatus) -> None:
+    async def wait_for_drone_status(
+        self, drone: Drone, target: DemoDroneStatus
+    ) -> None:
         condition = self.status_conditions[drone]
         async with condition:
             await condition.wait_for(lambda: self.status[drone] == target)
@@ -78,7 +80,7 @@ class DemoController(object):
         altitude_epsilon: float = 0.5,
         yaw_epsilon: float = 5.0,
         check_freqency_sec: float = 1.0,
-        status_at_completion: DroneStatus = None,
+        status_at_completion: DemoDroneStatus = None,
     ) -> None:
         # Fill out any None parameters with current drone values
         position = await self.get_one_position(drone)
@@ -133,11 +135,21 @@ class DemoController(object):
     async def comms_drone_mission(self, drone: Drone) -> None:
         logger.info("comms_drone: Arming")
         await drone.mavsdk_system.action.arm()
-        await self.set_drone_status(drone, DroneStatus.ARMED)
+        await self.set_drone_status(drone, DemoDroneStatus.ARMED)
+        drone.set_status(DroneStatus.ARMED)
+
+        # Set a faster state update rate for the communications drone
+        drone.set_state_update_rate(0.2)
 
         logger.info("comms_drone: Taking Off")
         await drone.mavsdk_system.action.takeoff()
-        await self.set_drone_status(drone, DroneStatus.IN_AIR)
+        await self.set_drone_status(drone, DemoDroneStatus.IN_AIR)
+        drone.set_status(DroneStatus.AIRBORNE)
+
+        await asyncio.sleep(5)
+
+        await drone.mavsdk_system.action.set_current_speed(10.0)
+
         # The VTOL can go to specific locations, the fixed wing drone cannot
 
         # await drone_goto(
@@ -159,13 +171,16 @@ class DemoController(object):
 
         logger.info("comms_drone: Entering orbit over firestation")
         await drone.mavsdk_system.action.do_orbit(
-            radius_m=18,
-            velocity_ms=2,
+            radius_m=25,
+            velocity_ms=1,
             yaw_behavior=OrbitYawBehavior.HOLD_FRONT_TANGENT_TO_CIRCLE,
             latitude_deg=32.061467,
             longitude_deg=118.779284,
-            absolute_altitude_m=30.0,
+            absolute_altitude_m=32.0,
         )
+
+        # 10 m/s speed seems to be the minimum
+        await drone.mavsdk_system.action.set_current_speed(10.0)
 
     async def x3_mission(self, drone: Drone) -> None:
         # Wait for VTOL to be in position above firestation
@@ -173,20 +188,22 @@ class DemoController(object):
         # Update: We want to show drones acting concurrently, so don't wait for VTOL
 
         # wait for a short time
-        await asyncio.sleep(15)
+        # await asyncio.sleep(15)
 
         logger.info("x3: Arming")
         await drone.mavsdk_system.action.arm()
-        await self.set_drone_status(drone, DroneStatus.ARMED)
+        await self.set_drone_status(drone, DemoDroneStatus.ARMED)
+        drone.set_status(DroneStatus.ARMED)
 
         logger.info("x3: Taking Off")
         await drone.mavsdk_system.action.takeoff()
-        await self.set_drone_status(drone, DroneStatus.IN_AIR)
+        await self.set_drone_status(drone, DemoDroneStatus.IN_AIR)
+        drone.set_status(DroneStatus.AIRBORNE)
 
         await self.drone_goto(
             drone,
             altitude_m=25.0,
-            status_at_completion=DroneStatus.ABOVE_LAUNCH_SITE,
+            status_at_completion=DemoDroneStatus.ABOVE_LAUNCH_SITE,
         )
 
         logger.info("x3 fly to firestation")
@@ -196,7 +213,7 @@ class DemoController(object):
             longitude_deg=118.779284,
             altitude_m=30.0,
             yaw_deg=120.0,
-            status_at_completion=DroneStatus.ABOVE_FIRESTATION,
+            status_at_completion=DemoDroneStatus.ABOVE_FIRESTATION,
         )
 
         logger.info("x3 look in firestation")
@@ -206,7 +223,7 @@ class DemoController(object):
             longitude_deg=118.779284,
             altitude_m=3.0,
             yaw_deg=200.0,
-            status_at_completion=DroneStatus.LOOKING_AT_FIRESTATION,
+            status_at_completion=DemoDroneStatus.LOOKING_AT_FIRESTATION,
         )
 
         logger.info("x3 fly in firestation")
@@ -216,7 +233,7 @@ class DemoController(object):
             longitude_deg=118.779241,
             altitude_m=3.0,
             yaw_deg=200.0,
-            status_at_completion=DroneStatus.IN_FIRESTATION,
+            status_at_completion=DemoDroneStatus.IN_FIRESTATION,
         )
 
         logger.info("x3 look around firestation")
@@ -250,7 +267,7 @@ class DemoController(object):
             longitude_deg=118.779249,
             altitude_m=2.6,
             yaw_deg=170.0,
-            status_at_completion=DroneStatus.LOOKING_AT_FIRESTATION,
+            status_at_completion=DemoDroneStatus.LOOKING_AT_FIRESTATION,
         )
 
         await asyncio.sleep(15)
@@ -269,15 +286,18 @@ class DemoController(object):
 
         logger.info("x500 Arming")
         await drone.mavsdk_system.action.arm()
-        await self.set_drone_status(drone, DroneStatus.ARMED)
+        await self.set_drone_status(drone, DemoDroneStatus.ARMED)
+        drone.set_status(DroneStatus.ARMED)
 
         logger.info("x500 Taking Off")
         await drone.mavsdk_system.action.takeoff()
-        await self.set_drone_status(drone, DroneStatus.IN_AIR)
+        await self.set_drone_status(drone, DemoDroneStatus.IN_AIR)
+        drone.set_status(DroneStatus.AIRBORNE)
+
         await self.drone_goto(
             drone,
             altitude_m=25.0,
-            status_at_completion=DroneStatus.ABOVE_LAUNCH_SITE,
+            status_at_completion=DemoDroneStatus.ABOVE_LAUNCH_SITE,
         )
 
         logger.info("x500 fly to firestation")
@@ -287,7 +307,7 @@ class DemoController(object):
             longitude_deg=118.779284,
             altitude_m=30.0,
             yaw_deg=120.0,
-            status_at_completion=DroneStatus.ABOVE_FIRESTATION,
+            status_at_completion=DemoDroneStatus.ABOVE_FIRESTATION,
         )
 
         logger.info("x500 look in firestation")
@@ -297,7 +317,7 @@ class DemoController(object):
             longitude_deg=118.779477,
             altitude_m=3.2,
             yaw_deg=270.0,
-            status_at_completion=DroneStatus.LOOKING_AT_FIRESTATION,
+            status_at_completion=DemoDroneStatus.LOOKING_AT_FIRESTATION,
         )
 
     async def xlab550_mission(self, drone: Drone) -> None:
@@ -306,20 +326,23 @@ class DemoController(object):
         # Update: We want to show drones acting concurrently, so don't wait for VTOL
 
         # wait for a short time
-        await asyncio.sleep(10)
+        # await asyncio.sleep(10)
 
         logger.info("xlab550: Arming")
         await drone.mavsdk_system.action.arm()
-        await self.set_drone_status(drone, DroneStatus.ARMED)
+        await self.set_drone_status(drone, DemoDroneStatus.ARMED)
+        drone.set_status(DroneStatus.ARMED)
 
         logger.info("xlab550: Taking Off")
         await drone.mavsdk_system.action.takeoff()
-        await self.set_drone_status(drone, DroneStatus.IN_AIR)
+        await self.set_drone_status(drone, DemoDroneStatus.IN_AIR)
+        drone.set_status(DroneStatus.AIRBORNE)
+
         logger.info("xlab550: Climbing to 30m")
         await self.drone_goto(
             drone,
             altitude_m=30.0,
-            status_at_completion=DroneStatus.ABOVE_LAUNCH_SITE,
+            status_at_completion=DemoDroneStatus.ABOVE_LAUNCH_SITE,
         )
 
         logger.info("xlab550: Turn to look towards firestation")
@@ -330,7 +353,7 @@ class DemoController(object):
             drone,
             latitude_deg=32.061265,
             longitude_deg=118.779401,
-            status_at_completion=DroneStatus.ABOVE_FIRESTATION,
+            status_at_completion=DemoDroneStatus.ABOVE_FIRESTATION,
         )
 
         logger.info("xlab550: look at firestation")
@@ -338,5 +361,5 @@ class DemoController(object):
             drone,
             altitude_m=9.0,
             yaw_deg=320.0,
-            status_at_completion=DroneStatus.LOOKING_AT_FIRESTATION,
+            status_at_completion=DemoDroneStatus.LOOKING_AT_FIRESTATION,
         )

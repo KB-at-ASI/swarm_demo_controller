@@ -57,7 +57,7 @@ class DroneListWidget(QWidget):
         self.connect_btn.clicked.connect(self.on_connect_clicked)
         button_layout.addWidget(self.connect_btn)
 
-        self.deploy_btn = QPushButton("Deploy Swarm")
+        self.deploy_btn = QPushButton("Execute Mission")
         self.deploy_btn.clicked.connect(
             lambda: asyncio.ensure_future(self.on_deploy_clicked())
         )
@@ -74,7 +74,7 @@ class DroneListWidget(QWidget):
 
         self.controller = controller
         for drone in controller.get_all_drones():
-            drone.add_status_listener(self)
+            drone.add_status_change_callback(self.drone_status_changed)
             self.table.insertRow(self.table.rowCount())
             row = self.table.rowCount() - 1
             self.table.setItem(row, 0, QTableWidgetItem(drone.drone_id))
