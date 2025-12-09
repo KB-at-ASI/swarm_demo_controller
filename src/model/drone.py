@@ -95,11 +95,6 @@ class Drone(object):
                 alt=pos.absolute_altitude_m if pos else None,
                 heading=heading,
             )
-
-            if self.drone_id == "lipan":
-                fwmetrics = await self.get_fixedwing_metrics()
-                print(f"Fixed wing metrics: {fwmetrics}")
-
             await asyncio.sleep(self._state_update_rate)
 
     async def get_one_position(self) -> Position:
