@@ -79,7 +79,7 @@ class MapWidget(QGraphicsView):
 
         self.pixmap_item: QGraphicsPixmapItem | None = None
         self.drones_items = {}  # name -> (ellipse, label)
-        self.lines = []
+        self.mission_lines = []
         self.mission_circle = None
         self.mission_point = None
 
@@ -175,9 +175,12 @@ class MapWidget(QGraphicsView):
         if self.mission_circle:
             self.scene.removeItem(self.mission_circle)
             self.mission_circle = None
-        for ln in self.lines:
+        if self.mission_point:
+            self.scene.removeItem(self.mission_point)
+            self.mission_point = None
+        for ln in self.mission_lines:
             self.scene.removeItem(ln)
-        self.lines.clear()
+        self.mission_lines.clear()
 
     def mouseMoveEvent(self, event):
         if not self.pixmap_item:
@@ -194,9 +197,11 @@ class MapWidget(QGraphicsView):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton and self.pixmap_item:
+            # clear previous mission
+            self.clear_mission()
+
             scene_pt = self.mapToScene(event.pos())
             lat, lon = self.point_to_latlon(scene_pt)
-            self.clear_mission()
             # draw mission point
             self.mission_point = QGraphicsEllipseItem(
                 scene_pt.x() - 4, scene_pt.y() - 4, 8, 8
@@ -280,4 +285,4 @@ class MapWidget(QGraphicsView):
             pen.setWidth(2)
             line.setPen(pen)
             self.scene.addItem(line)
-            self.lines.append(line)
+            self.mission_lines.append(line)
