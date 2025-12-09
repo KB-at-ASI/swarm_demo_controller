@@ -118,3 +118,9 @@ class Drone(object):
             fixed_wing_metrics
         ) in self.mavsdk_system.telemetry.fixedwing_metrics():
             return fixed_wing_metrics
+
+    async def disconnect(self) -> None:
+        # It seems there is no explicit disconnect method so we'll let the system be garbage collected
+        if self.mavsdk_system is not None:
+            self.mavsdk_system = None
+        self.set_status(DroneStatus.DISCONNECTED)
