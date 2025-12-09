@@ -124,7 +124,6 @@ class CentralWidget(QWidget):
     def on_selection_changed(self) -> None:
         selected = self.drone_list_widget.get_selected_drone_ids()
         self.map_widget.highlight_drones(selected)
-        self.map_widget.draw_lines_to_selected(selected)
 
 
 def run(controller: SwarmController | None = None) -> None:
