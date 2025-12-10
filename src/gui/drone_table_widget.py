@@ -114,5 +114,5 @@ class DroneListWidget(QWidget):
         self.controller.connect_all_drones()
 
     async def on_deploy_clicked(self) -> None:
-        self.status.setText("Deploy clicked")
+        self.status.setText("Executing mission...")
         await self.controller.deploy_swarm()
