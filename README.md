@@ -24,10 +24,17 @@ This project is used to fly the drones set up in the `swarm_demo.sh` script of t
    (.venv) pip3 install mavsdk
    ```
 
-4. Run the swarm.sh script from the PX4 repo. Wait for QGC and Gazebo to start up and all drones to appear.
-
-5. Run the swarm_demo
+4. Install project dependencies.
 
    ```bash
-   (.venv) python3 swarm_demo.py
+   (.venv) pip3 install -r requirements.txt
+   ```
+
+5. Run the swarm.sh script from the PX4 repo. Wait for QGC and Gazebo to start up and all drones to appear.
+
+6. Run the Swarm Controller application.
+
+   ```bash
+   (.venv) cd src
+   (.venv) python3 swarm_controller.app.py
    ```
