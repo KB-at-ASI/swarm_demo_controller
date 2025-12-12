@@ -3,7 +3,7 @@ import os
 from typing import List, Tuple
 from controller.swarm_controller import SwarmController
 from model.drone import Drone
-import util.geo_tools as geo_tools
+import utils.geo_tools as geo_tools
 
 from PySide6.QtCore import Qt, Signal, QPointF
 from PySide6.QtGui import QPixmap, QPen, QBrush, QColor, QPainter
