@@ -1,9 +1,9 @@
 import json
-import os
 from typing import List, Tuple
 from controller.swarm_controller import SwarmController
 from model.drone import Drone
 import utils.geo_tools as geo_tools
+import utils.file_utils as file_utils
 
 from PySide6.QtCore import Qt, Signal, QPointF
 from PySide6.QtGui import QPixmap, QPen, QBrush, QColor, QPainter
@@ -109,8 +109,12 @@ class MapWidget(QGraphicsView):
     def load_scenario(self, scenario_spec: json) -> None:
         if scenario_spec.get("map_image"):
             image_path = scenario_spec["map_image"]
-            if not os.path.isfile(image_path):
-                raise ValueError("Image file does not exist")
+
+            try:
+                image_path = file_utils.resolve_file_path(image_path)
+            except FileNotFoundError as e:
+                raise ValueError(f"Map image file not found: {image_path}") from e
+
             pixmap = QPixmap(image_path)
             self.set_pixmap(pixmap)
 
