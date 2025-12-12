@@ -36,5 +36,5 @@ This project is used to fly the drones set up in the `swarm_demo.sh` script of t
 
    ```bash
    (.venv) cd src
-   (.venv) python3 swarm_controller.app.py
+   (.venv) python3 swarm_controller_app.py
    ```
